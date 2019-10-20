@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:comtext="http://www.springframework.org/schema/context"
+       xmlns:aop="http://www.springframework.org/schema/aop" xmlns:tx="http://www.springframework.org/schema/tx"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd">
+
+    <!--spring除了不扫描控制器组件，其他业务逻辑组件都扫描-->
+    <context:component-scan base-package="xyz.fishman">
+        <context:exclude-filter type="annotation" expression="org.springframework.stereotype.Controller"/>
+    </context:component-scan>
+
+    <!--引入外部数据文件-->
+    <comtext:property-placeholder location="classpath:jdbc.properties"/>
+
+    <!--配置数据源-->
+    <bean class="com.mchange.v2.c3p0.ComboPooledDataSource" id="dataSource">
+        <property name="driverClass" value="${jdbc.driverClass}"/>
+        <property name="jdbcUrl" value="${jdbc.jdbcUrl}"/>
+        <property name="user" value="${jdbc.username}"/>
+        <property name="password" value="${jdbc.password}"/>
+    </bean>
+
+    <!--创建session工厂-->
+    <bean class="org.mybatis.spring.SqlSessionFactoryBean" id="sessionFactory">
+        <property name="dataSource" ref="dataSource"/>
+        <property name="mapperLocations" value="classpath:xyz/fishman/dao/*.xml"/>
+        <property name="configLocation" value="classpath:mybatis.xml"/>
+    </bean>
+    <!--创建dao接口的代理实现类-->
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="xyz.fishman.dao"/>
+    </bean>
+
+    <!--配置事务控制============开始-->
+    <!--配置事务管理器，用来控制数据源中连接的关闭和提交-->
+    <bean class="org.springframework.jdbc.datasource.DataSourceTransactionManager" id="transactionManager">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+    <!-- 配置事务增强 -->
+    <tx:advice id="transactionInterceptor" transaction-manager="transactionManager">
+        <tx:attributes>
+            <!-- 指定方法名称：是业务核心方法
+            read-only：是否是只读事务。默认 false，非只读。
+            isolation：指定事务的隔离级别。默认值是使用数据库的默认隔离级别。
+            propagation：指定事务的传播行为。
+            timeout：指定超时时间。默认值为： -1。永不超时。
+            rollback-for：用于指定一个异常，当执行产生该异常时，事务回滚，产生其他异常，事务不回滚。没有默认值，任何异常都回滚。
+            no-rollback-for：用于指定一个异常，当产生该异常时，事务不回滚，产生其他异常时，事务回滚。没有默认值，任何异常都回滚。
+            -->
+            <!--该类方法只读的事务， 如果有事务，加入事务执行，如果没有事务，非事务执行-->
+            <tx:method name="find*" read-only="true" propagation="SUPPORTS"/>
+            <tx:method name="query*" read-only="true" propagation="SUPPORTS"/>
+            <tx:method name="get*" read-only="true" propagation="SUPPORTS"/>
+            <!--其他方法：非只读事务，如果没有事务，创建一个事务，如果有事务，加入事务执行-->
+            <tx:method name="*" read-only="false" propagation="REQUIRED"></tx:method>
+        </tx:attributes>
+    </tx:advice>
+
+    <!-- 配置 aop -->
+    <aop:config>
+        <!-- 配置切入点表达式 -->
+        <aop:pointcut id="txPointcut" expression="execution(* xyz.fishman.service.*.*(..))"/>
+        <!-- 在 aop:config 标签内部： 建立事务的通知和切入点表达式的关系 -->
+        <aop:advisor advice-ref="transactionInterceptor" pointcut-ref="txPointcut"/>
+    </aop:config>
+    <!--配置事务控制============结束-->
+</beans>
